@@ -1,0 +1,137 @@
+{
+  "name": "P0-Ingest-Corpus",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "Fetch Markdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://raw.githubusercontent.com/jawwad-ali/self-healing-rag/main/corpus/source/cinder-analytics-docs.md",
+        "options": {}
+      }
+    },
+    {
+      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "Prepare Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "function fnv1a(s) {\n  let h = 0x811c9dc5;\n  for (let i = 0; i < s.length; i++) {\n    h ^= s.charCodeAt(i);\n    h = Math.imul(h, 0x01000193);\n  }\n  return (h >>> 0).toString(16).padStart(8, '0');\n}\n\nconst item = $input.first();\nconst text = item.json.data ?? item.json.body ?? (typeof item.json === 'string' ? item.json : JSON.stringify(item.json));\n\nreturn [{\n  json: {\n    content: text,\n    content_hash: fnv1a(text),\n    source: 'corpus/source/cinder-analytics-docs.md',\n    title: 'Cinder Analytics Platform — Product Documentation v3.2',\n    metadata: { version: '3.2', format: 'markdown' }\n  }\n}];"
+      }
+    },
+    {
+      "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8a",
+      "name": "Insert Document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO rag.documents (source, title, content_hash, metadata)\nVALUES ($1, $2, $3, $4::jsonb)\nRETURNING id",
+        "options": {
+          "queryReplacement": "={{ $json.source }}, ={{ $json.title }}, ={{ $json.content_hash }}, ={{ JSON.stringify($json.metadata) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a9b",
+      "name": "Split Into Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "function fnv1a(s) {\n  let h = 0x811c9dc5;\n  for (let i = 0; i < s.length; i++) {\n    h ^= s.charCodeAt(i);\n    h = Math.imul(h, 0x01000193);\n  }\n  return (h >>> 0).toString(16).padStart(8, '0');\n}\n\nconst text = $('Prepare Document').first().json.content;\nconst documentId = $input.first().json.id;\n\nconst sections = text.split(/\\n(?=## )/);\nconst out = [];\nlet idx = 0;\nfor (const sec of sections) {\n  const trimmed = sec.trim();\n  if (trimmed.length < 50) continue;\n  out.push({ json: {\n    document_id: documentId,\n    chunk_index: idx++,\n    content: trimmed,\n    content_hash: fnv1a(trimmed)\n  }});\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b0c",
+      "name": "Get Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.content }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "id": "0a1b2c3d-4e5f-4a6b-7c8d-9e0f1a2b3c4d",
+      "name": "Build Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const chunks = $('Split Into Chunks').all();\nconst embeddings = $input.all();\n\nreturn chunks.map((chunk, i) => ({\n  json: {\n    document_id: chunk.json.document_id,\n    chunk_index: chunk.json.chunk_index,\n    content: chunk.json.content,\n    content_hash: chunk.json.content_hash,\n    embedding: JSON.stringify(embeddings[i].json.data[0].embedding),\n    embedding_model: 'text-embedding-3-small'\n  }\n}));"
+      }
+    },
+    {
+      "id": "a7b8c9d0-e1f2-4a3b-4c5d-6e7f8a9b0c1d",
+      "name": "Insert Chunk",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 300],
+      "parameters": {
+        "schema": { "__rl": true, "mode": "list", "value": "rag" },
+        "table": { "__rl": true, "mode": "list", "value": "chunks" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run Manually": { "main": [[{ "node": "Fetch Markdown", "type": "main", "index": 0 }]] },
+    "Fetch Markdown": { "main": [[{ "node": "Prepare Document", "type": "main", "index": 0 }]] },
+    "Prepare Document": { "main": [[{ "node": "Insert Document", "type": "main", "index": 0 }]] },
+    "Insert Document": { "main": [[{ "node": "Split Into Chunks", "type": "main", "index": 0 }]] },
+    "Split Into Chunks": { "main": [[{ "node": "Get Embedding", "type": "main", "index": 0 }]] },
+    "Get Embedding": { "main": [[{ "node": "Build Row", "type": "main", "index": 0 }]] },
+    "Build Row": { "main": [[{ "node": "Insert Chunk", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
