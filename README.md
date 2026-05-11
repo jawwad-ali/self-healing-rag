@@ -118,14 +118,116 @@ The corpus is a fictional B2B SaaS product documentation set (Cinder Analytics) 
 
 ## Run it locally
 
-Coming once Phase 0 lands. The plan:
+The repo carries no secrets and no installed n8n state. Reproduce the system on a fresh machine like this.
 
-1. Clone the repo, copy `.env.example` to `.env`, fill in your keys.
-2. Apply the migration to your Neon (or local) Postgres.
-3. Import the n8n workflows from `workflows/` into a self-hosted n8n.
-4. Hit the chat webhook.
+### Prerequisites
 
-Phase 0 currently in progress. Watch this space.
+- **Node 20+** (for the migration runner)
+- **n8n 1.119+** — `npm install -g n8n`, or run via Docker
+- A **Neon Postgres project** (free tier works; pgvector is available out of the box)
+- An **OpenAI API key** (powers both chat and the eval judge)
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/jawwad-ali/self-healing-rag
+cd self-healing-rag
+npm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Fill in:
+- `DATABASE_URL` — your Neon **pooled** connection string (Neon dashboard → Connection details → "Pooled connection"). Pooled is important; n8n opens a new connection per execution.
+- `OPENAI_API_KEY` — `sk-...`
+
+`.env` is gitignored. Never commit it.
+
+### 3. Apply the schema
+
+```bash
+npm run migrate
+```
+
+Creates `rag.documents`, `rag.chunks`, `obs.queries`, `obs.eval_runs`, plus the `vector` extension. Idempotent — safe to re-run.
+
+### 4. Start n8n
+
+```bash
+n8n start
+```
+
+First boot asks you to create an owner account. Then open `http://localhost:5678`.
+
+### 5. Add the two credentials in n8n
+
+n8n stores credentials in its own encrypted DB. Go to **Settings → Credentials → New**:
+
+- **OpenAi account** (type: OpenAI API) — paste your `OPENAI_API_KEY`
+- **Postgres account** (type: Postgres) — fill host / db / user / password from your Neon dashboard. **SSL mode: require**. Use the **pooled** host (`*-pooler.*`).
+
+These exact names matter — the workflow JSON references them by name.
+
+### 6. Import the workflows
+
+In n8n's top-right menu → **Import from File** — pick each of:
+
+- `workflows/01-ingest-corpus.json` — chunks + embeds the corpus
+- `workflows/02-chat-webhook.json` — `/webhook/chat` endpoint
+- `workflows/03-eval-loop.json` — every-6-hour judge cron
+
+On first open, each node with a credential dropdown may show "Select credential" — click and pick the matching `OpenAi account` / `Postgres account`.
+
+### 7. Ingest the corpus (one-time)
+
+Open **P0-Ingest-Corpus** and click **Execute Workflow**. Watch for 50 chunks landing — verify:
+
+```sql
+SELECT count(*) FROM rag.chunks;  -- 50
+```
+
+### 8. Activate the chat + eval workflows
+
+For each of **P0-Chat-Webhook** and **P1-Eval-Loop**: open the workflow, click **Publish** / toggle to **Active** (UI varies by n8n version). The chat webhook will respond at the production URL; the eval cron will fire every 6 hours.
+
+### 9. Smoke test
+
+```bash
+curl -X POST http://localhost:5678/webhook/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What does Cinder charge for the Growth plan?"}'
+```
+
+Expected: a grounded answer citing source chunk IDs in ~2 seconds, and a row in `obs.queries`.
+
+---
+
+## Optional: AI-driven development via MCP
+
+If you want Claude Code / Cursor / Codex to manage workflows and run SQL directly:
+
+```bash
+# n8n workflow management
+claude mcp add n8n-mcp -- npx -y n8n-mcp
+# Add WEBHOOK_SECURITY_MODE=moderate to its env if you hit SSRF errors talking to localhost
+
+# Neon Postgres queries + branching
+claude mcp add --transport sse neon https://mcp.neon.tech/sse
+# First call triggers an OAuth flow in your browser
+```
+
+Restart Claude Code after adding. Then the assistant can validate eval scores live, create Postgres branches for canary tests (Phase 5), and build new workflows end-to-end without you clicking around the n8n UI.
+
+### What's intentionally NOT in the repo
+
+- `.env` — your secrets
+- `node_modules/`
+- `corpus/build/` — transient PDF artifacts (the committed `corpus/cinder-analytics-docs.pdf` is the deliverable)
+- Local AI-agent memory (those live per-user in `~/.claude/projects/...` and don't transfer between machines)
 
 ---
 
