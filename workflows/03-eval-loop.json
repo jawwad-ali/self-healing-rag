@@ -1,0 +1,141 @@
+{
+  "name": "P1-Eval-Loop",
+  "nodes": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000008",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 460],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 */6 * * *" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "name": "Pull Queries",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, question\nFROM obs.queries\nWHERE created_at >= now() - interval '24 hours'\nORDER BY random()\nLIMIT 20",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": { "name": "Postgres account" }
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000003",
+      "name": "HTTP /chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [680, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ question: $json.question }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000004",
+      "name": "Build Judge Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const queries = $('Pull Queries').all();\nconst responses = $input.all();\n\nreturn queries.map((q, i) => {\n  const r = responses[i].json;\n  const judgeUserPrompt = `Score the AI assistant's answer on three dimensions, each 1-5 (1 = poor, 5 = excellent):\\n\\n- relevance: Does the answer address the question that was asked?\\n- accuracy: Are the factual claims plausible given the cited source chunks? Penalize hallucinations.\\n- completeness: Does the answer cover what the question asks?\\n\\nReturn JSON exactly like: {\\\"relevance\\\": 5, \\\"accuracy\\\": 5, \\\"completeness\\\": 4, \\\"rationale\\\": \\\"<one sentence>\\\"}\\n\\n---\\n\\nQUESTION: ${q.json.question}\\n\\nANSWER: ${r.answer}\\n\\nCITED CHUNK IDS: ${JSON.stringify(r.retrieved_chunk_ids)}`;\n\n  return {\n    json: {\n      query_id: q.json.id,\n      question: q.json.question,\n      answer: r.answer,\n      retrieved_chunk_ids: r.retrieved_chunk_ids,\n      messages: [\n        { role: 'system', content: 'You are an impartial AI evaluation judge for a documentation Q&A system. You return ONLY valid JSON matching the requested schema, no commentary.' },\n        { role: 'user', content: judgeUserPrompt }\n      ]\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000005",
+      "name": "Judge LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1120, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o', messages: $json.messages, temperature: 0, response_format: { type: 'json_object' }, max_tokens: 300 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": { "name": "OpenAi account" }
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "name": "Build Eval Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const prompts = $('Build Judge Prompt').all();\nconst responses = $input.all();\n\nfunction clamp(n, lo, hi) {\n  const x = Number(n);\n  if (!Number.isFinite(x)) return Math.floor((lo + hi) / 2);\n  return Math.max(lo, Math.min(hi, Math.round(x)));\n}\n\nreturn prompts.map((p, i) => {\n  const content = responses[i].json.choices?.[0]?.message?.content ?? '{}';\n  let parsed = {};\n  try {\n    parsed = JSON.parse(content);\n  } catch (e) {\n    parsed = {};\n  }\n\n  return {\n    json: {\n      query_id: parseInt(p.json.query_id, 10),\n      judge_model: 'gpt-4o',\n      relevance: clamp(parsed.relevance, 1, 5),\n      accuracy: clamp(parsed.accuracy, 1, 5),\n      completeness: clamp(parsed.completeness, 1, 5),\n      rationale: parsed.rationale ?? null\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "name": "Insert Eval Row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 300],
+      "parameters": {
+        "schema": { "__rl": true, "mode": "list", "value": "obs", "cachedResultName": "obs" },
+        "table": { "__rl": true, "mode": "list", "value": "eval_runs", "cachedResultName": "eval_runs" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "credentials": {
+        "postgres": { "name": "Postgres account" }
+      }
+    }
+  ],
+  "connections": {
+    "Run Manually": { "main": [[{ "node": "Pull Queries", "type": "main", "index": 0 }]] },
+    "Every 6 Hours": { "main": [[{ "node": "Pull Queries", "type": "main", "index": 0 }]] },
+    "Pull Queries": { "main": [[{ "node": "HTTP /chat", "type": "main", "index": 0 }]] },
+    "HTTP /chat": { "main": [[{ "node": "Build Judge Prompt", "type": "main", "index": 0 }]] },
+    "Build Judge Prompt": { "main": [[{ "node": "Judge LLM", "type": "main", "index": 0 }]] },
+    "Judge LLM": { "main": [[{ "node": "Build Eval Row", "type": "main", "index": 0 }]] },
+    "Build Eval Row": { "main": [[{ "node": "Insert Eval Row", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
