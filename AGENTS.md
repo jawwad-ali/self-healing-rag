@@ -59,7 +59,7 @@ These hold across all phases. Breaking them silently is the most expensive kind 
 |---|---|
 | 0 | `curl` to n8n webhook returns a grounded answer; `obs.queries` has the row. |
 | 1 | Eval cron has run for ≥3 days; dashboard query shows score-over-time; one Slack alert has fired (intentionally or otherwise). |
-| 2 | Editing a tracked doc updates affected chunks' vectors and `updated_at` within 60 seconds, verified manually. |
+| 2 | Editing a tracked doc updates affected chunks' vectors and `updated_at` within 5 minutes (polling cron) or 60 seconds (webhook variant), verified manually across INSERT / CHANGED-cosmetic / CHANGED-meaningful / DELETE. |
 | 3 | `drift_scores` table has ≥4 weekly rows; one chunk has been auto-flagged for re-embed. |
 | 4 | A real eval failure produced a structured diagnosis written to a Linear/Notion ticket without human prompting. |
 | 5 | Two embedding models have run side-by-side for one week; canary promotion happened based on eval delta. |
@@ -71,3 +71,4 @@ These hold across all phases. Breaking them silently is the most expensive kind 
 - Wrapping the Anthropic/OpenAI SDKs in a custom client class. Use them directly.
 - Re-embedding the whole corpus to "be safe." Always incremental, always scoped to drifted/changed chunks.
 - Adding feature flags or backwards-compat shims. This is a greenfield project; change the code.
+- **Manipulating production DB rows to test workflow branches.** Use a Neon branch instead — `mcp__neon__create_branch` is one tool call. Phase 2 was built with planted lies on `main` and it cost us debugging cycles when a chunk's embedding was left in an inconsistent state mid-test. Branches isolate destructive tests for free.
