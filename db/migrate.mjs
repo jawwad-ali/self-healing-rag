@@ -26,11 +26,38 @@ const client = new pg.Client({ connectionString: url });
 await client.connect();
 
 try {
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS public._migrations (
+            filename TEXT PRIMARY KEY,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    `);
+
+    const { rows: applied } = await client.query(
+        `SELECT filename FROM public._migrations`
+    );
+    const appliedSet = new Set(applied.map((r) => r.filename));
+
     for (const file of files) {
+        if (appliedSet.has(file)) {
+            console.log(`-> ${file} ... (already applied)`);
+            continue;
+        }
         const sql = await readFile(join(migrationsDir, file), "utf8");
         process.stdout.write(`-> ${file} ... `);
-        await client.query(sql);
-        console.log("ok");
+        await client.query("BEGIN");
+        try {
+            await client.query(sql);
+            await client.query(
+                `INSERT INTO public._migrations (filename) VALUES ($1)`,
+                [file]
+            );
+            await client.query("COMMIT");
+            console.log("ok");
+        } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+        }
     }
 
     const tables = await client.query(`
@@ -40,7 +67,7 @@ try {
         ORDER BY table_schema, table_name;
     `);
 
-    console.log("\nSchema applied:");
+    console.log("\nSchema present:");
     for (const row of tables.rows) {
         console.log(`  ${row.table_schema}.${row.table_name}`);
     }

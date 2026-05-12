@@ -84,7 +84,7 @@ This is built in phases. Each phase is independently useful — you don't need a
 |---|---|---|
 | **0** | A working RAG: ingest, embed, retrieve, answer, log every query | ✅ shipped |
 | **1** | Quality eval loop: a 2nd LLM grades answers; alerts on regression | ✅ shipped |
-| **2** | Doc-change detection: edits trigger re-embedding only if meaningful | not started |
+| **2** | Doc-change detection: edits trigger re-embedding only if meaningful | ✅ shipped |
 | **3** | Drift detection: weekly comparison of embeddings vs. baseline | not started |
 | **4** | Investigator agent: when scores drop, an agent diagnoses *why* | not started |
 | **5** | Canary deployments + user-feedback loop: system improves itself weekly | not started |

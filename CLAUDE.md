@@ -39,7 +39,7 @@ n8n can host the `/chat` endpoint via a Webhook node, run pgvector queries via t
 
 - [x] **Phase 0 (W1)** — boring RAG: ingest one source, pgvector, n8n webhook `/chat`, query log
 - [x] **Phase 1 (W2)** — eval loop: cron → sample queries → LLM-as-judge (gpt-4o) → `eval_runs` table. Alerting deferred.
-- [ ] **Phase 2 (W3)** — doc-change webhook: diff old/new, re-embed if cosine < 0.95
+- [x] **Phase 2 (W3)** — doc-change polling cron: diff old/new per-chunk, cosine 0.95 gate, INSERT/CHANGED/DELETE branches
 - [ ] **Phase 3 (W4)** — drift detection: weekly re-embed sample, compare to baseline
 - [ ] **Phase 4 (W5–6)** — investigator agent (OpenAI Agents SDK in FastAPI)
 - [ ] **Phase 5 (W7+)** — canary deploys + thumbs-up/down feedback into eval set
