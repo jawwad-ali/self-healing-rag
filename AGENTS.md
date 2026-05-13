@@ -61,7 +61,7 @@ These hold across all phases. Breaking them silently is the most expensive kind 
 | 1 | Eval cron has run for ≥3 days; dashboard query shows score-over-time; one Slack alert has fired (intentionally or otherwise). |
 | 2 | Editing a tracked doc updates affected chunks' vectors and `updated_at` within 5 minutes (polling cron) or 60 seconds (webhook variant), verified manually across INSERT / CHANGED-cosmetic / CHANGED-meaningful / DELETE. |
 | 3 | `drift_scores` table receives one cosine-to-baseline row per chunk per weekly run (observe-only v1). Trend over ≥4 weeks visible. Auto-fix and re-baseline command deferred. |
-| 4 | A real eval failure produced a structured diagnosis written to a Linear/Notion ticket without human prompting. |
+| 4 | A real eval failure produced a structured diagnosis written to `obs.agent_diagnoses` (root_cause + recommended_fix + diagnosis), without human prompting. v1 is prompt-only — tool sub-workflows exist in repo but aren't yet wired to the agent. |
 | 5 | Two embedding models have run side-by-side for one week; canary promotion happened based on eval delta. |
 
 ## Anti-patterns to refuse

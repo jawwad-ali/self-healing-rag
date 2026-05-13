@@ -1,0 +1,102 @@
+{
+  "name": "P4-Investigator-Agent",
+  "nodes": [
+    {
+      "id": "70000000-0000-4000-8000-000000000001",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000002",
+      "name": "Every Day 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 460],
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }] }
+      }
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000003",
+      "name": "Find Failures",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 380],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT q.id AS query_id, q.question, q.answer, q.retrieved_chunks, q.retrieval_k, q.chat_model, q.embedding_model, e.id AS eval_run_id, e.overall, e.relevance, e.accuracy, e.completeness, e.rationale AS judge_rationale FROM obs.eval_runs e JOIN obs.queries q ON q.id = e.query_id WHERE e.overall < 3.5 AND NOT EXISTS (SELECT 1 FROM obs.agent_diagnoses d WHERE d.eval_run_id = e.id) ORDER BY e.overall ASC, e.created_at DESC LIMIT 5",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000004",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [700, 560],
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-4o", "cachedResultName": "gpt-4o" },
+        "options": { "temperature": 0, "responseFormat": "json_object" }
+      },
+      "credentials": { "openAiApi": { "name": "OpenAi account" } }
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000005",
+      "name": "Investigator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [700, 380],
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior RAG infrastructure engineer investigating WHY a query scored low. Return ONLY valid JSON.\n\nQUERY: {{ $json.question }}\n\nANSWER GIVEN: {{ $json.answer }}\n\nJUDGE SCORES (1-5):\n- relevance: {{ $json.relevance }}\n- accuracy: {{ $json.accuracy }}\n- completeness: {{ $json.completeness }}\n- overall: {{ $json.overall }}\n\nJUDGE RATIONALE: {{ $json.judge_rationale }}\n\nRETRIEVED CHUNKS (top-{{ $json.retrieval_k }}, JSON):\n{{ JSON.stringify($json.retrieved_chunks) }}\n\nReturn JSON exactly like:\n{\n  \"root_cause\": \"one-paragraph hypothesis explaining the dimension(s) that scored lowest, grounded in the retrieved chunks vs the question intent\",\n  \"recommended_fix\": \"one concrete actionable change (e.g. 'increase k to 8 to retrieve more changelog chunks', 'add a guardrail to refuse out-of-scope questions like ping', 'add a section to the corpus covering X')\",\n  \"diagnosis\": \"full 2-3 sentence summary suitable for a morning report\"\n}",
+        "options": {
+          "systemMessage": "You are an impartial RAG diagnostician. You analyze failed queries using the provided context (question, answer, retrieved chunks, judge scores) and produce a structured JSON diagnosis. Be specific about WHICH chunk failed to provide what information. You do NOT hallucinate fixes; you ground them in the evidence you were shown."
+        }
+      }
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000006",
+      "name": "Build Diagnosis Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 380],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const failures = $('Find Failures').all();\nconst agentOutputs = $input.all();\n\nreturn failures.map((f, i) => {\n  const raw = agentOutputs[i]?.json?.output ?? agentOutputs[i]?.json?.text ?? '{}';\n  let parsed = {};\n  if (typeof raw === 'string') {\n    try { parsed = JSON.parse(raw); } catch (e) { parsed = { diagnosis: raw }; }\n  } else if (typeof raw === 'object') {\n    parsed = raw;\n  }\n\n  return {\n    json: {\n      query_id: parseInt(f.json.query_id, 10),\n      eval_run_id: parseInt(f.json.eval_run_id, 10),\n      diagnosis: String(parsed.diagnosis ?? 'Agent returned no diagnosis').slice(0, 4000),\n      root_cause: parsed.root_cause ?? null,\n      recommended_fix: parsed.recommended_fix ?? null,\n      tools_used: JSON.stringify([]),\n      agent_model: 'gpt-4o',\n      iterations: 1\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000007",
+      "name": "Insert Diagnoses",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 380],
+      "parameters": {
+        "schema": { "__rl": true, "mode": "list", "value": "obs", "cachedResultName": "obs" },
+        "table": { "__rl": true, "mode": "list", "value": "agent_diagnoses", "cachedResultName": "agent_diagnoses" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [] },
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Run Manually": { "main": [[{ "node": "Find Failures", "type": "main", "index": 0 }]] },
+    "Every Day 8am": { "main": [[{ "node": "Find Failures", "type": "main", "index": 0 }]] },
+    "Find Failures": { "main": [[{ "node": "Investigator Agent", "type": "main", "index": 0 }]] },
+    "OpenAI Chat Model": { "ai_languageModel": [[{ "node": "Investigator Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Investigator Agent": { "main": [[{ "node": "Build Diagnosis Row", "type": "main", "index": 0 }]] },
+    "Build Diagnosis Row": { "main": [[{ "node": "Insert Diagnoses", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

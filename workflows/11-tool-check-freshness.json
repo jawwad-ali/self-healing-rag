@@ -1,0 +1,36 @@
+{
+  "name": "P4-Tool-Check-Freshness",
+  "nodes": [
+    {
+      "id": "63000000-0000-4000-8000-000000000001",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "63000000-0000-4000-8000-000000000002",
+      "name": "Query Chunk Freshness",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id AS chunk_id, document_id, chunk_index, content_hash, embedding_model, length(content) AS content_length, created_at, updated_at, round(EXTRACT(EPOCH FROM (NOW() - updated_at))/3600.0, 2) AS hours_since_update FROM rag.chunks WHERE id = {{ parseInt($json.chunk_id, 10) }}",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Query Chunk Freshness", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

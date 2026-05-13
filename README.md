@@ -86,7 +86,7 @@ This is built in phases. Each phase is independently useful — you don't need a
 | **1** | Quality eval loop: a 2nd LLM grades answers; alerts on regression | ✅ shipped |
 | **2** | Doc-change detection: edits trigger re-embedding only if meaningful | ✅ shipped |
 | **3** | Drift detection: weekly comparison of embeddings vs. baseline | ✅ shipped |
-| **4** | Investigator agent: when scores drop, an agent diagnoses *why* | not started |
+| **4** | Investigator agent: when scores drop, an agent diagnoses *why* | ✅ shipped |
 | **5** | Canary deployments + user-feedback loop: system improves itself weekly | not started |
 
 The honest version: **Phases 0 to 2 alone** are already what most "RAG developers" can't actually build. That's the realistic shipping target.

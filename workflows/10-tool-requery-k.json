@@ -1,0 +1,58 @@
+{
+  "name": "P4-Tool-Requery-K",
+  "nodes": [
+    {
+      "id": "62000000-0000-4000-8000-000000000001",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "62000000-0000-4000-8000-000000000002",
+      "name": "Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [460, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.question }) }}",
+        "options": {}
+      },
+      "credentials": { "openAiApi": { "name": "OpenAi account" } }
+    },
+    {
+      "id": "62000000-0000-4000-8000-000000000003",
+      "name": "Vector Search Alt K",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id AS chunk_id, document_id, chunk_index, left(content, 300) AS content_preview, 1 - (embedding <=> '{{ JSON.stringify($json.data[0].embedding) }}'::vector) AS similarity FROM rag.chunks ORDER BY embedding <=> '{{ JSON.stringify($json.data[0].embedding) }}'::vector LIMIT {{ Math.min(20, Math.max(1, parseInt($('Execute Workflow Trigger').first().json.k, 10) || 5)) }}",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Embed Question", "type": "main", "index": 0 }]] },
+    "Embed Question": { "main": [[{ "node": "Vector Search Alt K", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

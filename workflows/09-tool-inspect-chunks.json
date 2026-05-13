@@ -1,0 +1,36 @@
+{
+  "name": "P4-Tool-Inspect-Chunks",
+  "nodes": [
+    {
+      "id": "61000000-0000-4000-8000-000000000001",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "61000000-0000-4000-8000-000000000002",
+      "name": "Query Retrieved Chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id AS query_id, question, retrieved_chunks, chat_model, embedding_model, retrieval_k, latency_ms FROM obs.queries WHERE id = {{ parseInt($json.query_id, 10) }}",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Query Retrieved Chunks", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

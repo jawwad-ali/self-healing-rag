@@ -1,0 +1,36 @@
+{
+  "name": "P4-Tool-Get-Failed-Queries",
+  "nodes": [
+    {
+      "id": "60000000-0000-4000-8000-000000000001",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "60000000-0000-4000-8000-000000000002",
+      "name": "Query Failed Evals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT q.id AS query_id, q.question, left(q.answer, 300) AS answer_preview, q.retrieval_k, e.id AS eval_run_id, e.overall, e.relevance, e.accuracy, e.completeness, e.rationale, e.created_at FROM obs.eval_runs e JOIN obs.queries q ON q.id = e.query_id WHERE e.overall < 3.5 ORDER BY e.overall ASC, e.created_at DESC LIMIT 20",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Query Failed Evals", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
