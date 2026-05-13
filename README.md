@@ -4,6 +4,8 @@ A RAG system that watches its own quality, notices when it's getting worse, and 
 
 Built on **n8n + Neon Postgres + OpenAI**. No Python runtime required.
 
+> **Status: all 5 phases shipped.** 13 workflows live, 3 schema migrations, 5 cron schedules running concurrently. The full closed loop is proven end-to-end with real data — see the [canary results](#whats-actually-running-right-now) below.
+
 ---
 
 ## What this project is, in one minute
@@ -12,7 +14,21 @@ Built on **n8n + Neon Postgres + OpenAI**. No Python runtime required.
 
 The problem: **RAG quietly gets worse over time.** Documents change, prices update, policies are revised, the model that turns text into searchable "fingerprints" (embeddings) drifts. Most teams only find out when a customer complains.
 
-This project is a RAG that monitors itself. Three small background workflows (we call them *watchers*) run on a schedule, grade the system's own answers, detect when documents have changed, and re-do the parts that have gone stale. It's the difference between buying a car and buying a car that books its own service appointments.
+This project is a RAG that monitors itself. Six background workflows (we call them *watchers*) run on a schedule, grade the system's own answers, detect when documents have changed, re-do the parts that have gone stale, **and now also A/B-test their own fixes**. It's the difference between buying a car and buying a car that books its own service appointments, then runs a controlled experiment to verify each service actually helped.
+
+## What's actually running right now
+
+After all 5 phases shipped, the system is live with this evidence trail in the database:
+
+| Demo step | What happened (real data) |
+|---|---|
+| Phase 1 graded the chat answers | Flagged *"What is new in Cinder v3.0?"* at overall score 3.00/5 |
+| Phase 4 agent diagnosed it | **"Increase k to 8 to retrieve more changelog chunks"** |
+| Phase 5 canary A/B tested the fix | 8 queries × control (k=5) + 8 × canary (k=8), graded by gpt-4o |
+| Eval delta | control overall 4.65 → canary **4.88 (+0.23)**, completeness **+0.36** ✓ |
+| Decision | promote v0.2 (operator accepts +3.3s latency for measurable quality gain) |
+
+That's **eval → diagnose → A/B test → data-backed promotion**, end-to-end, without anyone in the loop except the operator clicking "promote" at the end.
 
 ---
 

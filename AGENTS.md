@@ -2,9 +2,13 @@
 
 Guidance for any AI coding agent (Claude Code, Cursor, Codex, Aider, etc.) working in this repo. Human-facing context lives in `CLAUDE.md`; this file is the operational contract.
 
+## Project state
+
+**All 5 phases of the spec PDF are shipped.** 13 workflows, 3 migrations, 5 cron schedules. The repo is in operate-and-extend mode, not build-from-scratch mode. Before adding anything new, check the phase status table in `CLAUDE.md` and the "Definition of done" table below — the bar for "done" is now higher than for "first version."
+
 ## Repository purpose
 
-Self-healing RAG pipeline. Main workflow serves answers; three watcher workflows audit and repair it. All components communicate through one Postgres database — no internal HTTP APIs between halves.
+Self-healing RAG pipeline. Main workflow serves answers; multiple watcher + agent workflows audit, repair, diagnose, and A/B test the system. All components communicate through one Postgres database — no internal HTTP APIs between halves.
 
 ## Ground rules
 

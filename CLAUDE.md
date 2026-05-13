@@ -2,9 +2,20 @@
 
 Project spec: `Self_Healing_RAG_Pipeline_Project.pdf` in this directory. Read it before making architectural decisions.
 
+## Project state (May 2026)
+
+**All 5 phases of the spec PDF are shipped.** The closed self-healing loop is proven end-to-end with real eval data:
+
+- 13 n8n workflows committed in `workflows/` (chat × 2, ingest, doc-change, eval, baseline, drift, investigator + 4 tools, canary, feedback)
+- 3 schema migrations applied
+- 5 cron schedules running concurrently (chat = on-demand, eval = 6h, doc-change = 5min, drift = weekly Sunday, investigator = daily 8am)
+- Two endpoints: `/webhook/chat` (Phase 0 baseline), `/webhook/chat-v2` (Phase 5 canary), plus `/webhook/feedback`
+
+The bar is now **operating and extending**, not building from scratch. New work goes into Phase 4.1 (wire tool sub-workflows to the investigator agent), Phase 5.1 (automated canary promotion), or new corpus sources.
+
 ## What this project is
 
-A RAG system that monitors its own answer quality, detects embedding/content drift, and re-embeds itself without manual intervention. The build is split into two cooperating halves that talk through Postgres — there is no service-to-service API.
+A RAG system that monitors its own answer quality, detects embedding/content drift, re-embeds itself without manual intervention, **and A/B tests its own fixes**. The build is split into cooperating halves that talk through Postgres — there is no service-to-service API.
 
 ```
 Main workflow         Watcher workflows (3 triggers)
