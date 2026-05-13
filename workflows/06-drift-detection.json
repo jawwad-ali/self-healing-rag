@@ -1,0 +1,102 @@
+{
+  "name": "P3-Drift-Detection",
+  "nodes": [
+    {
+      "id": "50000000-0000-4000-8000-000000000001",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000002",
+      "name": "Every Sunday 3am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 460],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 3 * * 0" }]
+        }
+      }
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000003",
+      "name": "Pull Sample",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 380],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  c.id AS chunk_id,\n  c.content,\n  c.embedding_model,\n  b.id AS baseline_id,\n  b.embedding::text AS baseline_embedding\nFROM rag.chunks c\nJOIN obs.baseline_embeddings b ON b.chunk_id = c.id\nORDER BY random()\nLIMIT 100",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000004",
+      "name": "Embed Current",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [680, 380],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.content }) }}",
+        "options": {}
+      },
+      "credentials": { "openAiApi": { "name": "OpenAi account" } }
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000005",
+      "name": "Build Score Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 380],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "function cosineSim(a, b) {\n  let dot = 0, na = 0, nb = 0;\n  for (let i = 0; i < a.length; i++) {\n    dot += a[i] * b[i];\n    na  += a[i] * a[i];\n    nb  += b[i] * b[i];\n  }\n  return dot / (Math.sqrt(na) * Math.sqrt(nb));\n}\n\nconst samples = $('Pull Sample').all();\nconst embeddings = $input.all();\n\nreturn samples.map((s, i) => {\n  let baseline = null;\n  try {\n    baseline = JSON.parse(s.json.baseline_embedding);\n  } catch (e) {\n    baseline = null;\n  }\n  const current = embeddings[i]?.json?.data?.[0]?.embedding;\n  let cosine = 0;\n  if (Array.isArray(baseline) && Array.isArray(current) && baseline.length === current.length) {\n    const raw = cosineSim(baseline, current);\n    cosine = Number.isFinite(raw) ? Math.max(-1, Math.min(1, raw)) : 0;\n  }\n  return {\n    json: {\n      chunk_id: parseInt(s.json.chunk_id, 10),\n      baseline_id: parseInt(s.json.baseline_id, 10),\n      cosine_to_base: cosine\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000006",
+      "name": "Insert Drift Scores",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1120, 380],
+      "parameters": {
+        "schema": { "__rl": true, "mode": "list", "value": "obs", "cachedResultName": "obs" },
+        "table": { "__rl": true, "mode": "list", "value": "drift_scores", "cachedResultName": "drift_scores" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Run Manually": { "main": [[{ "node": "Pull Sample", "type": "main", "index": 0 }]] },
+    "Every Sunday 3am": { "main": [[{ "node": "Pull Sample", "type": "main", "index": 0 }]] },
+    "Pull Sample": { "main": [[{ "node": "Embed Current", "type": "main", "index": 0 }]] },
+    "Embed Current": { "main": [[{ "node": "Build Score Rows", "type": "main", "index": 0 }]] },
+    "Build Score Rows": { "main": [[{ "node": "Insert Drift Scores", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

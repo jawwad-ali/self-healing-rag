@@ -1,0 +1,36 @@
+{
+  "name": "P3-Snapshot-Baseline",
+  "nodes": [
+    {
+      "id": "40000000-0000-4000-8000-000000000001",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "40000000-0000-4000-8000-000000000002",
+      "name": "Seed Baseline Embeddings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO obs.baseline_embeddings (chunk_id, embedding, embedding_model)\nSELECT c.id, c.embedding, c.embedding_model\nFROM rag.chunks c\nWHERE c.embedding IS NOT NULL\n  AND NOT EXISTS (\n    SELECT 1 FROM obs.baseline_embeddings b WHERE b.chunk_id = c.id\n  )\nRETURNING id, chunk_id",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    }
+  ],
+  "connections": {
+    "Run Manually": { "main": [[{ "node": "Seed Baseline Embeddings", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
