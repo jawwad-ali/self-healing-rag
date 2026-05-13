@@ -8,6 +8,31 @@ Built on **n8n + Neon Postgres + OpenAI**. No Python runtime required.
 
 ---
 
+## See it in action
+
+Snapshots from the running system — n8n on the workflow side, Next.js on the operator side.
+
+**Phase 2 — the doc-change watcher.** Runs every 5 minutes, fetches the corpus from GitHub, hashes it, and exits in 500 ms if nothing changed.
+When the doc *is* edited, the Switch node fans into INSERT / CHANGED-with-cosine-0.95-gate / DELETE branches that all converge through a wait-all merge before the document hash is finalized.
+
+![P2 Doc-Change-Detector workflow in n8n](docs/images/01-p2-workflow.png)
+
+---
+
+**The operator's dashboard.** Six color-coded health gauges across the top (AVG EVAL 4.83 / 5 in green, drift 0%, 32 queries in 24h), live recent queries on the left.
+And on the right, the investigator agent's actual diagnoses — including its concrete recommendation to *"Increase k to 8 to retrieve more changelog or version-specific chunks"* for the v3.0 question, which Phase 5's canary then went on to validate.
+
+![Self-Healing RAG Dashboard](docs/images/02-dashboard.png)
+
+---
+
+**The corpus inventory page.** All 50 chunks from the Cinder Analytics docs listed with their content preview, content hash, embedding model, and most-recent drift score relative to the May-13 baseline.
+The `0 drifted (cosine < 0.95)` header is the corpus health check at a glance; the moment Phase 3's Sunday cron finds any chunk below threshold, that count moves and the row turns rose.
+
+![Corpus inventory page](docs/images/03-corpus.png)
+
+---
+
 ## What this project is, in one minute
 
 **RAG** (Retrieval-Augmented Generation) is when an AI looks things up in your documents *before* answering. Like an open-book exam — the AI reads your knowledge base, then writes the answer.
