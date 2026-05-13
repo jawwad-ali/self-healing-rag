@@ -1,5 +1,17 @@
 # Self-Healing RAG Pipeline
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+![Phases shipped](https://img.shields.io/badge/phases-5%2F5%20shipped-brightgreen?style=flat-square)
+[![Last commit](https://img.shields.io/github/last-commit/jawwad-ali/self-healing-rag?style=flat-square)](https://github.com/jawwad-ali/self-healing-rag/commits)
+[![Stars](https://img.shields.io/github/stars/jawwad-ali/self-healing-rag?style=flat-square)](https://github.com/jawwad-ali/self-healing-rag/stargazers)
+
+![Next.js](https://img.shields.io/badge/Next.js-15-000?style=flat-square&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![n8n](https://img.shields.io/badge/n8n-1.119-EA4B71?style=flat-square&logo=n8n&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Neon](https://img.shields.io/badge/Neon-serverless-00E599?style=flat-square&logo=neon&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o-412991?style=flat-square&logo=openai&logoColor=white)
+
 A RAG system that watches its own quality, notices when it's getting worse, and fixes itself — without anyone telling it to.
 
 Built on **n8n + Neon Postgres + OpenAI**. No Python runtime required.
@@ -277,3 +289,13 @@ Restart Claude Code after adding. Then the assistant can validate eval scores li
 The classic mistake on ambitious AI projects is building the smart part before the boring part actually works. This repo is built the other way around: ingest first, log everything, watch for problems, then add intelligence.
 
 Build it boring. Build it observable. **Then** make it smart.
+
+---
+
+## Star this if it helped
+
+If this project gave you ideas — for self-healing RAG, for n8n-driven observability, or for shipping a five-phase spec end-to-end — consider giving it a ⭐. It tells me which patterns resonate and helps others find this work.
+
+## License
+
+[MIT](LICENSE) — use it, fork it, ship it.
