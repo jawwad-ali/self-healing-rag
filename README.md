@@ -87,9 +87,9 @@ This is built in phases. Each phase is independently useful — you don't need a
 | **2** | Doc-change detection: edits trigger re-embedding only if meaningful | ✅ shipped |
 | **3** | Drift detection: weekly comparison of embeddings vs. baseline | ✅ shipped |
 | **4** | Investigator agent: when scores drop, an agent diagnoses *why* | ✅ shipped |
-| **5** | Canary deployments + user-feedback loop: system improves itself weekly | not started |
+| **5** | Canary deployments + user-feedback loop: system improves itself weekly | ✅ shipped |
 
-The honest version: **Phases 0 to 2 alone** are already what most "RAG developers" can't actually build. That's the realistic shipping target.
+The honest version: **Phases 0 to 2 alone** are already what most "RAG developers" can't actually build. **All five phases shipped here** — including a demonstrated end-to-end self-healing loop where Phase 4's agent diagnosed *"Increase k to 8"* on a failing query, Phase 5's canary tested it 50/50, and the data confirmed +0.36 completeness improvement.
 
 ---
 

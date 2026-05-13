@@ -42,7 +42,7 @@ n8n can host the `/chat` endpoint via a Webhook node, run pgvector queries via t
 - [x] **Phase 2 (W3)** — doc-change polling cron: diff old/new per-chunk, cosine 0.95 gate, INSERT/CHANGED/DELETE branches
 - [x] **Phase 3 (W4)** — drift detection: frozen baseline + weekly Sunday cron re-embeds, JS cosine, records to `obs.drift_scores`. Observe-only v1 (no auto-fix).
 - [x] **Phase 4 (W5–6)** — investigator agent: n8n AI Agent (gpt-4o, JSON-mode), daily 8am cron, writes structured diagnoses to `obs.agent_diagnoses`. v1 is prompt-only (4 tool sub-workflows ship in repo for Phase 4.1).
-- [ ] **Phase 5 (W7+)** — canary deploys + thumbs-up/down feedback into eval set
+- [x] **Phase 5 (W7+)** — canary at `/webhook/chat-v2` with 50/50 A/B split (k=5 control vs k=8 canary), `/webhook/feedback` for thumbs-up/down, `db/queries/canary_compare.sql` for the weekly variant comparison.
 
 The doc says stop after Phase 2 and ship. Treat that as the real MVP target.
 

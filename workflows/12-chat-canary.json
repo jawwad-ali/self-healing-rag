@@ -1,0 +1,150 @@
+{
+  "name": "P5-Chat-Canary",
+  "nodes": [
+    {
+      "id": "80000000-0000-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [240, 300],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000002",
+      "name": "Pick Variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const item = $input.first();\nconst question = item.json.body?.question ?? item.json.question ?? '';\nconst forced = (item.json.body?.variant ?? '').toLowerCase();\nlet variant;\nif (forced === 'control') {\n  variant = { k: 5, model_version: 'v0.1-openai-cosine-top5', variant: 'control' };\n} else if (forced === 'canary') {\n  variant = { k: 8, model_version: 'v0.2-openai-cosine-top8', variant: 'canary' };\n} else {\n  const r = Math.random();\n  variant = r < 0.5\n    ? { k: 5, model_version: 'v0.1-openai-cosine-top5', variant: 'control' }\n    : { k: 8, model_version: 'v0.2-openai-cosine-top8', variant: 'canary' };\n}\nreturn [{\n  json: {\n    question,\n    ...variant,\n    start_ms: Date.now()\n  }\n}];"
+      }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000003",
+      "name": "Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [680, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.question }) }}",
+        "options": {}
+      },
+      "credentials": { "openAiApi": { "name": "OpenAi account" } }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000004",
+      "name": "Vector Search",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id, document_id, chunk_index, content\nFROM rag.chunks\nORDER BY embedding <=> '{{ JSON.stringify($json.data[0].embedding) }}'::vector\nLIMIT {{ $('Pick Variant').first().json.k }}",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000005",
+      "name": "Compose Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const picked = $('Pick Variant').first().json;\nconst chunks = $input.all().map(item => item.json);\n\nconst context = chunks.map((c, i) =>\n  `[Source ${i + 1}, chunk_id=${c.id}]\\n${c.content}`\n).join('\\n\\n---\\n\\n');\n\nconst messages = [\n  {\n    role: 'system',\n    content: 'You are a documentation assistant for the Cinder Analytics Platform. Answer the user\\'s question using ONLY the provided context. If the answer is not in the context, say so explicitly. Cite source chunk IDs in square brackets, e.g. [chunk 42].'\n  },\n  {\n    role: 'user',\n    content: `Context:\\n${context}\\n\\nQuestion: ${picked.question}`\n  }\n];\n\nreturn [{\n  json: {\n    question: picked.question,\n    variant: picked.variant,\n    k: picked.k,\n    model_version: picked.model_version,\n    start_ms: picked.start_ms,\n    retrieved_chunks: chunks.map(c => ({\n      id: c.id,\n      document_id: c.document_id,\n      chunk_index: c.chunk_index,\n      preview: String(c.content).slice(0, 200)\n    })),\n    messages\n  }\n}];"
+      }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000006",
+      "name": "Chat Completion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [1340, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o-mini', messages: $json.messages, temperature: 0.2, max_tokens: 500 }) }}",
+        "options": {}
+      },
+      "credentials": { "openAiApi": { "name": "OpenAi account" } }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000007",
+      "name": "Build Log Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const composed = $('Compose Prompt').first().json;\nconst completion = $input.first().json;\n\nconst answer = completion.choices?.[0]?.message?.content ?? '';\nconst rawLatency = Date.now() - composed.start_ms;\nconst latencyMs = Math.max(0, Math.min(2147483647, Number.isFinite(rawLatency) ? rawLatency : 0));\n\nreturn [{\n  json: {\n    question: composed.question,\n    answer: answer,\n    retrieved_chunks: JSON.stringify(composed.retrieved_chunks),\n    chat_model: 'gpt-4o-mini',\n    embedding_model: 'text-embedding-3-small',\n    retrieval_k: composed.k,\n    model_version: composed.model_version,\n    latency_ms: latencyMs\n  }\n}];"
+      }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000008",
+      "name": "Log Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 300],
+      "parameters": {
+        "schema": { "__rl": true, "mode": "list", "value": "obs", "cachedResultName": "obs" },
+        "table": { "__rl": true, "mode": "list", "value": "queries", "cachedResultName": "queries" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [] },
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "80000000-0000-4000-8000-000000000009",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2000, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"answer\": {{ JSON.stringify($('Build Log Row').first().json.answer) }},\n  \"variant\": {{ JSON.stringify($('Pick Variant').first().json.variant) }},\n  \"model_version\": {{ JSON.stringify($('Build Log Row').first().json.model_version) }},\n  \"retrieved_chunk_ids\": {{ JSON.stringify($('Compose Prompt').first().json.retrieved_chunks.map(c => c.id)) }},\n  \"latency_ms\": {{ $('Build Log Row').first().json.latency_ms }}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Pick Variant", "type": "main", "index": 0 }]] },
+    "Pick Variant": { "main": [[{ "node": "Embed Question", "type": "main", "index": 0 }]] },
+    "Embed Question": { "main": [[{ "node": "Vector Search", "type": "main", "index": 0 }]] },
+    "Vector Search": { "main": [[{ "node": "Compose Prompt", "type": "main", "index": 0 }]] },
+    "Compose Prompt": { "main": [[{ "node": "Chat Completion", "type": "main", "index": 0 }]] },
+    "Chat Completion": { "main": [[{ "node": "Build Log Row", "type": "main", "index": 0 }]] },
+    "Build Log Row": { "main": [[{ "node": "Log Query", "type": "main", "index": 0 }]] },
+    "Log Query": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}

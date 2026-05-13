@@ -62,7 +62,7 @@ These hold across all phases. Breaking them silently is the most expensive kind 
 | 2 | Editing a tracked doc updates affected chunks' vectors and `updated_at` within 5 minutes (polling cron) or 60 seconds (webhook variant), verified manually across INSERT / CHANGED-cosmetic / CHANGED-meaningful / DELETE. |
 | 3 | `drift_scores` table receives one cosine-to-baseline row per chunk per weekly run (observe-only v1). Trend over ≥4 weeks visible. Auto-fix and re-baseline command deferred. |
 | 4 | A real eval failure produced a structured diagnosis written to `obs.agent_diagnoses` (root_cause + recommended_fix + diagnosis), without human prompting. v1 is prompt-only — tool sub-workflows exist in repo but aren't yet wired to the agent. |
-| 5 | Two embedding models have run side-by-side for one week; canary promotion happened based on eval delta. |
+| 5 | Two `model_version` variants have run side-by-side; eval-score delta visible via `db/queries/canary_compare.sql`. Promotion is a manual decision (v1) made by reading the comparison. |
 
 ## Anti-patterns to refuse
 

@@ -1,0 +1,67 @@
+{
+  "name": "P5-Feedback",
+  "nodes": [
+    {
+      "id": "90000000-0000-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [240, 300],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "feedback",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "90000000-0000-4000-8000-000000000002",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const body = $input.first().json.body || {};\nconst query_id = parseInt(body.query_id, 10);\nlet feedback = parseInt(body.feedback, 10);\nif (!Number.isFinite(query_id) || query_id <= 0) {\n  throw new Error('feedback: query_id must be a positive integer');\n}\nif (![1, -1, 0].includes(feedback)) {\n  throw new Error('feedback: feedback must be 1 (up), -1 (down), or 0 (clear)');\n}\nreturn [{ json: { query_id, feedback } }];"
+      }
+    },
+    {
+      "id": "90000000-0000-4000-8000-000000000003",
+      "name": "Update Feedback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE obs.queries SET user_feedback = {{ $json.feedback }} WHERE id = {{ $json.query_id }} RETURNING id, user_feedback, model_version",
+        "options": {}
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "90000000-0000-4000-8000-000000000004",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [900, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"query_id\": {{ $json.id }},\n  \"user_feedback\": {{ $json.user_feedback }},\n  \"model_version\": {{ JSON.stringify($json.model_version) }}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validate", "type": "main", "index": 0 }]] },
+    "Validate": { "main": [[{ "node": "Update Feedback", "type": "main", "index": 0 }]] },
+    "Update Feedback": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true
+  }
+}
