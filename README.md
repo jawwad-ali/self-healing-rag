@@ -16,6 +16,8 @@ A RAG system that watches its own answer quality, notices when it's getting wors
 
 Built on **n8n + Neon Postgres + OpenAI**, with a **Next.js** operator dashboard. No Python runtime required.
 
+📖 **Full case study:** [alijawwad.com/projects/self-healing-rag →](https://www.alijawwad.com/projects/self-healing-rag)
+
 > **Status: all 5 phases shipped.** 13 n8n workflows live, 3 schema migrations, 5 cron schedules running concurrently, plus a Next.js dashboard. The full closed loop — *grade → diagnose → A/B test → promote* — is proven end-to-end with real data (see [What's actually running right now](#-whats-actually-running-right-now)).
 
 > **📖 This README also doubles as an interview guide.** If you're here to understand the project well enough to explain it out loud, read the [30-Second Pitch](#-the-30-second-pitch), then the [Interview Walkthrough](#-interview-walkthrough) at the bottom. Everything in between is the detail behind those two sections.
